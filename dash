@@ -1,0 +1,750 @@
+# Importação de pacotes utilizados
+from yellowbrick.regressor import ResidualsPlot
+import dash_bootstrap_components as dbc
+from dash.dependencies import Input, Output, State
+import plotly.graph_objects as go
+from dash import Dash, html, dcc
+import pandas as pd
+import dash
+import plotly.express as px
+import plotly_ecdf
+import seaborn as srn
+import statistics as sts
+import numpy as np
+import matplotlib.pyplot as plt
+from math import ceil
+from scipy import stats
+from scipy.stats import norm, skewnorm
+import matplotlib.pyplot as plt
+from sklearn.linear_model import LinearRegression
+pd.options.plotting.backend = 'plotly'
+import plotly.io as pio
+import base64
+import datetime
+import io
+import dash_table
+
+app = dash.Dash(__name__, external_stylesheets=[dbc.themes.COSMO])
+
+def parse_contents(contents, filename, date):
+    content_type, content_string = contents.split(',')
+
+    decoded = base64.b64decode(content_string)
+    try:
+        if 'csv' in filename:
+            # Assume that the user uploaded a CSV file
+            df = pd.read_csv(
+                io.StringIO(decoded.decode('utf-8')))
+        elif 'xls' in filename:
+            # Assume that the user uploaded an excel file
+            df = pd.read_excel(io.BytesIO(decoded))
+    except Exception as e:
+        print(e)
+        return html.Div([
+            'There was an error processing this file.'
+        ])
+
+    return html.Div([
+        html.H5(filename),
+        html.P("Inset X axis data"),
+        dcc.Dropdown(id='xaxis-data',
+                     options=[{'label':x, 'value':x} for x in df.columns]),
+        html.P("Inset Y axis data"),
+        dcc.Dropdown(id='yaxis-data',
+                     options=[{'label':x, 'value':x} for x in df.columns]),
+        html.Button(id="submit-button", children="Create Graph"),
+        html.Hr(),
+        dash_table.DataTable(
+            df.to_dict('records'),
+            [{'name': i, 'id': i} for i in df.columns]
+        ),
+
+        html.Hr(),  # horizontal line
+
+        # For debugging, display the raw contents provided by the web browser
+        html.Div('Raw Content'),
+        html.Pre(contents[0:200] + '...', style={
+            'whiteSpace': 'pre-wrap',
+            'wordBreak': 'break-all'
+        })
+    ])
+
+        
+def tratar_dados(df):
+            df.drop(df.columns[[1, 2, 3, 5, 6]], axis=1, inplace=True)
+            df.rename(columns={df.columns[0]: "servico", df.columns[1]: "data", df.columns[2]: "valor"}, inplace=True)
+            df['servico'] = df['servico'].astype(str)
+            df['valor'] = df['valor'].str.replace(',', '.').astype(float)
+            index_to_drop = df[df["data"] == "Data"].index
+            df.drop(index_to_drop, inplace=True)
+            df["data"] = pd.to_datetime(df["data"], format='%d/%m/%Y')
+            df.reset_index(drop=True, inplace=True)
+            df['servico'] = df['servico'].str.strip().str.title().drop_duplicates()
+            return df
+
+def get_service_info(df, search_string, end_string):
+            try:
+                in_idx = df[df["servico"].str.startswith(search_string)].index[0]
+                fi_idx = df[(df["servico"].str.startswith(end_string))
+                            & (df.index > in_idx)].index[0]
+                return df.loc[in_idx:fi_idx]
+            except IndexError:
+                return None
+def cont_tratamento():
+            fulano = get_service_info(df, "fulano", "TOTAL DE FULANO")
+            ciclano = get_service_info(df, "ciclano", "TOTAL DE CICLANO")
+            beltrano = get_service_info(df, "beltrano", "TOTAL DE BELTRANO")
+            return fulano, ciclano, beltrano
+def process_dataframe(df, setor):
+            if df is None:
+                return None
+            try:
+                df = df.drop(df.index[[0, -1]])
+                df.insert(3, "setor", setor)
+                return df
+            except IndexError:
+                return None
+def cond_tratamento2():
+            fulano, ciclano, beltrano = cont_tratamento()
+            fulano1 = process_dataframe(fulano, "Financeiro")
+            ciclano1 = process_dataframe(ciclano, "Financeiro")
+            beltrano1 = process_dataframe(beltrano, "Financeiro")
+            return fulano1, ciclano1, beltrano1
+def concatenar():
+            ciclano1, fulano1, beltrano1 = cond_tratamento2()
+            dados = pd.concat([fulano1, beltrano1, ciclano1])
+            return dados
+
+def estatistica1():
+            dados = concatenar()
+            df_cs = dados[dados["setor"] == "CS"]
+            df_cs.to_csv("df_cs.csv")
+            df_cs = pd.read_csv("df_cs.csv")
+            df_cs['valor'] = df_cs['valor'].str.replace(',', '.').astype(float)
+
+            df_trials = dados[dados["setor"] == "Trials"]
+            df_trials.to_csv("df_trials.csv")
+            df_trials = pd.read_csv("df_trials.csv")
+            df_trials['valor'] = df_trials['valor'].str.replace(',', '.').astype(float)
+
+            df_nfemais = dados[dados["setor"] == "Nfemais"]
+            df_nfemais.to_csv("df_nfemais.csv")
+            df_nfemais = pd.read_csv("df_nfemais.csv")
+            df_nfemais['valor'] = df_nfemais['valor'].str.replace(',', '.').astype(float)
+
+            df_farmer = dados[dados["setor"] == "Farmer"]
+            df_farmer.to_csv("df_farmer.csv")
+            df_farmer = pd.read_csv("df_farmer.csv")
+            df_farmer['valor'] = df_farmer['valor'].str.replace(',', '.').astype(float)
+
+            df_inband = dados[dados["setor"] == "Inband"]
+            df_inband.to_csv("df_inband.csv")
+            df_inband = pd.read_csv("df_inband.csv")
+            df_inband['valor'] = df_inband['valor'].str.replace(',', '.').astype(float)
+
+            df_outband = dados[dados["setor"] == "Outband"]
+            df_outband.to_csv("df_outband.csv")
+            df_outband = pd.read_csv("df_outband.csv")
+            df_outband['valor'] = df_outband['valor'].str.replace(',', '.').astype(float)
+
+            df_financeiro = dados[dados["setor"] == "Financeiro"]
+            df_financeiro.to_csv("df_financeiro.csv")
+            df_financeiro = pd.read_csv("df_financeiro.csv")
+            df_financeiro['valor'] = df_financeiro['valor'].str.replace(',', '.').astype(float)
+            return df_trials, df_nfemais, df_financeiro, df_cs, df_inband, df_outband, df_farmer
+
+
+def estatistica_cs():
+            dados = concatenar()
+            df_cs = dados[dados["setor"] == "CS"]
+            df_cs.to_csv("df_cs.csv")
+            df_cs = pd.read_csv("df_cs.csv")
+            df_cs['valor'] = df_cs['valor'].str.replace(',', '.').astype(float)
+            return df_cs
+
+def estatistica_trials():
+            dados = concatenar()
+            df_trials = dados[dados["setor"] == "Trials"]
+            df_trials.to_csv("df_trials.csv")
+            df_trials = pd.read_csv("df_trials.csv")
+            df_trials['valor'] = df_trials['valor'].str.replace(',', '.').astype(float)
+            return df_trials
+
+def estatistica_nfemais():
+            dados = concatenar()
+            df_nfemais = dados[dados["setor"] == "Nfemais"]
+            df_nfemais.to_csv("df_nfemais.csv")
+            df_nfemais = pd.read_csv("df_nfemais.csv")
+            df_nfemais['valor'] = df_nfemais['valor'].str.replace(',', '.').astype(float)
+            return df_nfemais
+
+
+def estatistica_farmer():
+            dados = concatenar()
+            df_farmer = dados[dados["setor"] == "Farmer"]
+            df_farmer.to_csv("df_farmer.csv")
+            df_farmer = pd.read_csv("df_farmer.csv")
+            df_farmer['valor'] = df_farmer['valor'].str.replace(',', '.').astype(float)
+            return df_farmer
+
+def estatistica_inband():
+            dados = concatenar()
+            df_inband = dados[dados["setor"] == "Inband"]
+            df_inband.to_csv("df_inband.csv")
+            df_inband = pd.read_csv("df_inband.csv")
+            df_inband['valor'] = df_inband['valor'].str.replace(',', '.').astype(float)
+            return df_inband
+
+def estatistica_outband():
+            dados = concatenar()
+            df_outband = dados[dados["setor"] == "Outband"]
+            df_outband.to_csv("df_outband.csv")
+            df_outband = pd.read_csv("df_outband.csv")
+            df_outband['valor'] = df_outband['valor'].str.replace(',', '.').astype(float)
+            return df_outband
+
+def estatistica_financeiro():
+            dados = concatenar()
+            df_financeiro = dados[dados["setor"] == "Financeiro"]
+            df_financeiro.to_csv("df_financeiro.csv")
+            df_financeiro = pd.read_csv("df_financeiro.csv")
+            df_financeiro['valor'] = df_financeiro['valor'].str.replace(',', '.').astype(float)
+            return df_financeiro
+
+def estatistica_soma():
+            df_cs, df_trials, df_nfemais, df_financeiro, df_inband, df_outband, df_farmer = estatistica1()
+            soma_cs = df_cs['valor'].sum().round(2)
+            soma_trials = df_trials['valor'].sum().round(2)
+            soma_nfemais = df_nfemais['valor'].sum().round(2)
+            soma_farmer = df_farmer['valor'].sum().round(2)
+            soma_inband = df_inband['valor'].sum().round(2)
+            soma_outband = df_outband['valor'].sum().round(2)
+            soma_financeiro = df_financeiro['valor'].sum().round(2)
+            return soma_cs, soma_trials, soma_nfemais, soma_farmer, soma_inband, soma_outband, soma_financeiro
+
+def estatistica_mediana():
+            df_cs, df_trials, df_nfemais, df_financeiro, df_inband, df_outband, df_farmer = estatistica1()
+            mediana_cs = df_cs['valor'].median()
+            mediana_trials = df_trials['valor'].median()
+            mediana_nfemais = df_nfemais['valor'].median()
+            mediana_farmer = df_farmer['valor'].median()
+            mediana_inband = df_inband['valor'].median()
+            mediana_outband = df_outband['valor'].median()
+            mediana_financeiro = df_financeiro['valor'].median()
+            return mediana_cs, mediana_trials, mediana_nfemais, mediana_farmer, mediana_inband, mediana_outband, mediana_financeiro
+
+def estatistica_media():
+            df_cs, df_trials, df_nfemais, df_financeiro, df_inband, df_outband, df_farmer = estatistica1()
+            media_cs = df_cs['valor'].mean()
+            media_trials = df_trials['valor'].mean()
+            media_nfemais = df_nfemais['valor'].mean()
+            media_farmer = df_farmer['valor'].mean()
+            media_inband = df_inband['valor'].mean()
+            media_outband = df_outband['valor'].mean()
+            media_financeiro = df_financeiro['valor'].mean()
+            return media_cs, media_trials, media_nfemais, media_farmer, media_inband, media_outband, media_financeiro
+
+
+def cont_trat1():
+            soma_cs, soma_trials, soma_nfemais, soma_farmer, soma_inband, soma_outband, soma_financeiro = estatistica_soma()
+            data1 = {"DataFrame": ["CS", "FARMER", "FINANCEIRO", "INBAND", "NFEMAIS", "OUTBAND", "TRIALS"],
+                    "Soma": [soma_cs, soma_farmer, soma_financeiro, soma_inband, soma_nfemais, soma_outband, soma_trials]}
+            resultado_soma = pd.DataFrame(data1)
+            return resultado_soma
+
+def cont_trat2():
+            mediana_cs, mediana_trials, mediana_nfemais, mediana_farmer, mediana_inband, mediana_outband, mediana_financeiro = estatistica_mediana()
+            data2 = {"DataFrame": ["CS", "FARMER", "FINANCEIRO", "INBAND", "NFEMAIS", "OUTBAND", "TRIALS"],
+                    "Mediana": [mediana_cs, mediana_farmer, mediana_financeiro, mediana_inband, mediana_nfemais, mediana_outband, mediana_trials]}
+            resultado_mediana = pd.DataFrame(data2)
+            return resultado_mediana
+
+def cont_trat3():
+            media_cs, media_trials, media_nfemais, media_farmer, media_inband, media_outband, media_financeiro = estatistica_media()
+            data3 = {"DataFrame": ["CS", "FARMER", "FINANCEIRO", "INBAND", "NFEMAIS", "OUTBAND", "TRIALS"],
+                    "Média": [media_cs, media_farmer, media_financeiro, media_inband, media_nfemais, media_outband, media_trials]}
+            resultado_media = pd.DataFrame(data3)
+            return resultado_media
+
+def graficos0():
+            df_trials = estatistica_trials()    
+            trials_janeiro = []
+            for date in df_trials['data'].unique():
+                df_date = df_trials.loc[df_trials['data'] == date]
+                sum_valor = df_date['valor'].sum()
+                trials_janeiro.append({'data': date, 'sum_valor': sum_valor})
+            trials_janeiro1 = pd.DataFrame(trials_janeiro)
+            return trials_janeiro1
+
+def graficos00():
+            trials_janeiro1 = graficos0()
+            fig00 = px.bar(trials_janeiro1,
+                        x='data',
+                        y='sum_valor',
+                        height=500,
+                        color_discrete_sequence=px.colors.qualitative.Set3,
+                        template='plotly_dark')
+            fig00.update_xaxes(title='Setores')
+            fig00.update_yaxes(title='Valor')
+            fig00.update_layout(title={
+                'text': 'Análise diária do Setor Nfemais ao longo do mês',
+                'y': 0.9,
+                'x': 0.5
+            })
+            return fig00
+
+def graficos1():
+            df_nfemais = estatistica_nfemais()
+            nfemais_janeiro = []
+            for date in df_nfemais['data'].unique():
+                df_date = df_nfemais.loc[df_nfemais['data'] == date]
+                sum_valor = df_date['valor'].sum()
+                nfemais_janeiro.append({'data': date, 'sum_valor': sum_valor})
+            nfemais_janeiro1 = pd.DataFrame(nfemais_janeiro)
+            return nfemais_janeiro1
+
+def graficos11():
+            nfemais_janeiro1 = graficos1()
+            fig01 = px.bar(nfemais_janeiro1,
+                        x='data',
+                        y='sum_valor',
+                        height=500,
+                        color_discrete_sequence=px.colors.qualitative.Set3,
+                        template='plotly_dark')
+            fig01.update_xaxes(title='Setores')
+            fig01.update_yaxes(title='Valor')
+            fig01.update_layout(title={
+                'text': 'Análise diária do Setor Nfemais ao longo do mês',
+                'y': 0.9,
+                'x': 0.5
+            })
+            return fig01
+
+
+def graficos2():
+            df_farmer = estatistica_farmer()
+            farmer_janeiro = []
+            for date in df_farmer['data'].unique():
+                df_date = df_farmer.loc[df_farmer['data'] == date]
+                sum_valor = df_date['valor'].sum()
+                farmer_janeiro.append({'data': date, 'sum_valor': sum_valor})
+            farmer_janeiro1 = pd.DataFrame(farmer_janeiro)
+            return farmer_janeiro1
+
+def graficos22():
+            farmer_janeiro1 = graficos2()
+            fig02 = px.bar(farmer_janeiro1,
+                        x='data',
+                        y='sum_valor',
+                        height=500,
+                        color_discrete_sequence=px.colors.qualitative.Set3,
+                        template='plotly_dark')
+            fig02.update_xaxes(title='Setores')
+            fig02.update_yaxes(title='Valor')
+            fig02.update_layout(title={
+                'text': 'Análise diária do Setor Farmer ao longo do mês',
+                'y': 0.9,
+                'x': 0.5
+            })
+            return fig02
+
+
+def graficos3():
+            df_cs = estatistica_cs()
+            cs_janeiro = []
+            for date in df_cs['data'].unique():
+                df_date = df_cs.loc[df_cs['data'] == date]
+                sum_valor = df_date['valor'].sum()
+                cs_janeiro.append({'data': date, 'sum_valor': sum_valor})
+            cs_janeiro1 = pd.DataFrame(cs_janeiro)
+            return cs_janeiro1
+
+def graficos33():
+            cs_janeiro1 = graficos3()
+            fig03 = px.bar(cs_janeiro1,
+                        x='data',
+                        y='sum_valor',
+                        height=500,
+                        color_discrete_sequence=px.colors.qualitative.Set3,
+                        template='plotly_dark')
+            fig03.update_xaxes(title='Setores')
+            fig03.update_yaxes(title='Valor')
+            fig03.update_layout(title={
+                'text': 'Análise diária do Setor CS ao longo do mês',
+                'y': 0.9,
+                'x': 0.5
+            })
+            return fig03
+
+def graficos4():
+            df_financeiro = estatistica_financeiro()
+            financeiro_janeiro = []
+            for date in df_financeiro['data'].unique():
+                df_date = df_financeiro.loc[df_financeiro['data'] == date]
+                sum_valor = df_date['valor'].sum()
+                financeiro_janeiro.append({'data': date, 'sum_valor': sum_valor})
+            financeiro_janeiro1 = pd.DataFrame(financeiro_janeiro)
+            return financeiro_janeiro1
+
+def graficos44():
+            financeiro_janeiro1 = graficos4()
+            fig04 = px.bar(financeiro_janeiro1,
+                        x='data',
+                        y='sum_valor',
+                        height=500,
+                        color_discrete_sequence=px.colors.qualitative.Set3,
+                        template='plotly_dark')
+            fig04.update_xaxes(title='Setores')
+            fig04.update_yaxes(title='Valor')
+            fig04.update_layout(title={
+                'text': 'Análise diária do Setor Financeiro ao longo do mês',
+                'y': 0.9,
+                'x': 0.5
+            })
+            return fig04
+
+def graficos5():
+            df_inband = estatistica_inband()
+            inband_janeiro = []
+            for date in df_inband['data'].unique():
+                df_date = df_inband.loc[df_inband['data'] == date]
+                sum_valor = df_date['valor'].sum()
+                inband_janeiro.append({'data': date, 'sum_valor': sum_valor})
+            inband_janeiro1 = pd.DataFrame(inband_janeiro)
+            return inband_janeiro1
+
+def graficos55():
+            inband_janeiro1 = graficos5()
+            fig05 = px.bar(inband_janeiro1,
+                        x='data',
+                        y='sum_valor',
+                        height=400,
+                        color_discrete_sequence=px.colors.qualitative.Set3,
+                        template='plotly_dark')
+            fig05.update_xaxes(title='Setores')
+            fig05.update_yaxes(title='Valor')
+            fig05.update_layout(title={
+                'text': 'Análise diária do Setor Inband ao longo do mês',
+                'y': 0.9,
+                'x': 0.5
+            })
+            return fig05
+
+def graficos6():
+            df_outband = estatistica_outband()
+            outband_janeiro = []
+            for date in df_outband['data'].unique():
+                df_date = df_outband.loc[df_outband['data'] == date]
+                sum_valor = df_date['valor'].sum()
+                outband_janeiro.append({'data': date, 'sum_valor': sum_valor})
+            outband_janeiro1 = pd.DataFrame(outband_janeiro)
+            return outband_janeiro1
+
+def graficos66():
+            outband_janeiro1 = graficos6()
+            fig06 = px.bar(outband_janeiro1,
+                        x='data',
+                        y='sum_valor',
+                        height=500,
+                        color_discrete_sequence=px.colors.qualitative.Set3,
+                        template='plotly_dark')
+            fig06.update_xaxes(title='Setores')
+            fig06.update_yaxes(title='Valor')
+            fig06.update_layout(title={
+                'text': 'Análise diária do Setor Outband ao longo do mês',
+                'y': 0.9,
+                'x': 0.5
+            })
+            return fig06
+
+def graficos_total():
+            fig00 = graficos00()
+            fig01 = graficos11()
+            fig02 = graficos22()
+            fig03 = graficos33()
+            fig04 = graficos44()
+            fig05 = graficos55()
+            fig06 = graficos66()
+            
+            figs = {'CS': fig03, 'Farmer': fig02,
+                    'Financeiro': fig04,'Inband': fig05,
+                    'Nfmais': fig01, 'Outband': fig06, 
+                    'Trials': fig00}
+            return figs
+
+        #################################################################
+
+
+def calcular_soma_acumulada_total():
+            cs_janeiro1 = graficos3()
+            farmer_janeiro1 = graficos2()
+            nfemais_janeiro1 = graficos1()
+            financeiro_janeiro1 = graficos4()
+            trials_janeiro1 = graficos0()
+            outband_janeiro1 = graficos6()
+            inband_janeiro1 = graficos5()
+            
+            dfs = [cs_janeiro1, farmer_janeiro1, nfemais_janeiro1, financeiro_janeiro1,
+                trials_janeiro1, outband_janeiro1, inband_janeiro1]
+            for i, df in enumerate(dfs):
+                df = df.sort_values('data')
+                dfs[i]['soma_acumulada'] = df['sum_valor'].cumsum()
+            
+            return dfs
+
+def cont_soma(dfs):
+            valores_cs = dfs[0]['soma_acumulada']
+            valores_farmer = dfs[1]['soma_acumulada']
+            valores_nfemais = dfs[2]['soma_acumulada']
+            valores_financeiro = dfs[3]['soma_acumulada']
+            valores_trials = dfs[4]['soma_acumulada']
+            valores_outband = dfs[5]['soma_acumulada']
+            valores_inband = dfs[6]['soma_acumulada']
+            
+            return valores_cs, valores_farmer, valores_nfemais, valores_financeiro, valores_trials, valores_outband, valores_inband
+
+dfs = calcular_soma_acumulada_total()
+valores_cs, valores_farmer, valores_nfemais, valores_financeiro, valores_trials, valores_outband, valores_inband = cont_soma(dfs)
+
+
+def graficos_acum_cs():
+            cs_janeiro1 = graficos3()
+            df_data_cs = cs_janeiro1['data'].drop_duplicates()
+            df_data2_cs = df_data_cs.value_counts().sort_index()
+            x1 = np.linspace(1, len(df_data2_cs), len(valores_cs))
+
+            fig10 = px.line(x=df_data2_cs.index,
+                                y=np.array(valores_cs), 
+                                height=500,
+                                color_discrete_sequence=px.colors.qualitative.Set3,
+                                template='plotly_dark')
+            fig10.update_xaxes(title='Dia do mês')
+            fig10.update_yaxes(title='Valor')
+            fig10.update_layout(title={
+                    'text': 'Curva de crescimento diária do Setor CS ao longo do mês',
+                    'y': 0.9,
+                    'x': 0.5
+                    })
+            return fig10
+
+def graficos_acum_farmer():
+            farmer_janeiro1 = graficos2()
+            df_data_farmer = farmer_janeiro1['data'].drop_duplicates()
+            df_data2_farmer = df_data_farmer.value_counts().sort_index()
+            x2 = np.linspace(1, len(df_data2_farmer), len(valores_farmer))
+            fig11 = px.line(x=df_data2_farmer.index,
+                                y=np.array(valores_farmer), 
+                                height=500,
+                                color_discrete_sequence=px.colors.qualitative.Set3,
+                                template='plotly_dark')
+            fig11.update_xaxes(title='Dia do mês')
+            fig11.update_yaxes(title='Valor')
+            fig11.update_layout(title={
+                    'text': 'Curva de crescimento diária do Setor Farmer ao longo do mês',
+                    'y': 0.9,
+                    'x': 0.5
+                })
+            return fig11
+
+def graficos_acum_nfemais():
+            nfemais_janeiro1 = graficos1()
+            df_data_nfemais = nfemais_janeiro1['data'].drop_duplicates()
+            df_data2_nfemais = df_data_nfemais.value_counts().sort_index()
+            x3 = np.linspace(1, len(df_data2_nfemais), len(valores_nfemais))
+
+            fig12 = px.line(x=df_data2_nfemais.index,
+                                y=np.array(valores_nfemais), 
+                                height=500,
+                                color_discrete_sequence=px.colors.qualitative.Set3,
+                                template='plotly_dark')
+            fig12.update_xaxes(title='Dia do mês')
+            fig12.update_yaxes(title='Valor')
+            fig12.update_layout(title={
+                    'text': 'Curva de crescimento diária do Setor Nfemais ao longo do mês',
+                    'y': 0.9,
+                    'x': 0.5
+                })
+            return fig12
+
+def graficos_acum_financeiro():
+            financeiro_janeiro1 = graficos4()
+            df_data_financeiro = financeiro_janeiro1['data'].drop_duplicates()
+            df_data2_financeiro = df_data_financeiro.value_counts().sort_index()
+            x4 = np.linspace(1, len(df_data2_financeiro), len(valores_financeiro))
+
+            fig13 = px.line(x=df_data2_financeiro.index,
+                                y=np.array(valores_financeiro), 
+                                height=500,
+                                color_discrete_sequence=px.colors.qualitative.Set3,
+                                template='plotly_dark')
+            fig13.update_xaxes(title='Dia do mês')
+            fig13.update_yaxes(title='Valor')
+            fig13.update_layout(title={
+                    'text': 'Curva de crescimento diária do Setor Financeiro ao longo do mês',
+                    'y': 0.9,
+                    'x': 0.5
+                })
+            return fig13
+
+def graficos_acum_trials():
+            trials_janeiro1 = graficos0()
+            df_data_trials = trials_janeiro1['data'].drop_duplicates()
+            df_data2_trials = df_data_trials.value_counts().sort_index()
+            x5 = np.linspace(1, len(df_data2_trials), len(valores_trials))
+
+            fig14 = px.line(x=df_data2_trials.index,
+                                y=np.array(valores_trials), 
+                                height=500,
+                                color_discrete_sequence=px.colors.qualitative.Set3,
+                                template='plotly_dark')
+            fig14.update_xaxes(title='Dia do mês')
+            fig14.update_yaxes(title='Valor')
+            fig14.update_layout(title={
+                    'text': 'Curva de crescimento diária do Setor Trials ao longo do mês',
+                    'y': 0.9,
+                    'x': 0.5
+                })
+            return fig14
+
+def graficos_acum_outband():
+            outband_janeiro1 = graficos6()
+            df_data_outband = outband_janeiro1['data'].drop_duplicates()
+            df_data2_outband = df_data_outband.value_counts().sort_index()
+            x6 = np.linspace(1, len(df_data2_outband), len(valores_outband))
+
+            fig15 = px.line(x=df_data2_outband.index,
+                            y=np.array(valores_outband), 
+                            height=500,
+                            color_discrete_sequence=px.colors.qualitative.Set3,
+                            template='plotly_dark')
+            fig15.update_xaxes(title='Dia do mês')
+            fig15.update_yaxes(title='Valor')
+            fig15.update_layout(title={
+                    'text': 'Curva de crescimento diária do Setor Outband ao longo do mês',
+                    'y': 0.9,
+                    'x': 0.5
+                })
+            return fig15
+
+def graficos_acum_inband():
+            inband_janeiro1 = graficos5()
+            df_data_inband = inband_janeiro1['data'].drop_duplicates()
+            df_data2_inband = df_data_inband.value_counts().sort_index()
+            x7 = np.linspace(1, len(df_data2_inband), len(valores_inband))
+
+            fig16 = px.line(x=df_data2_inband.index,
+                                y=np.array(valores_inband), 
+                                height=500,
+                                color_discrete_sequence=px.colors.qualitative.Set3,
+                                template='plotly_dark')
+            fig16.update_xaxes(title='Dia do mês')
+            fig16.update_yaxes(title='Valor')
+            fig16.update_layout(title={
+                    'text': 'Curva de crescimento diária do Setor Inband ao longo do mês',
+                    'y': 0.9,
+                    'x': 0.5
+                })
+            return fig16
+
+
+def graficos_total2():
+            fig10 = graficos_acum_cs()
+            fig11 = graficos_acum_farmer()
+            fig12 = graficos_acum_nfemais()
+            fig13 = graficos_acum_financeiro()
+            fig14 = graficos_acum_trials()
+            fig15 = graficos_acum_outband()
+            fig16 = graficos_acum_inband()
+            
+            figs2 = {'CS': fig10, 'Farmer': fig11,
+                    'Financeiro': fig13,'Inband': fig16,
+                    'Nfmais': fig12, 'Outband': fig15, 
+                    'Trials': fig14}
+
+            return figs2
+
+# Criação do layout do Dashboard
+app.layout = html.Div([
+    dcc.Upload(
+        id='upload-data',
+        children=html.Div([
+            'Arraste e solte ou ',
+            html.A('selecione um arquivo')
+        ]),
+        style={
+            'width': '100%',
+            'height': '60px',
+            'lineHeight': '60px',
+            'borderWidth': '1px',
+            'borderStyle': 'dashed',
+            'borderRadius': '5px',
+            'textAlign': 'center',
+            'margin': '10px'
+        },
+        multiple=False
+    ),
+    html.Div(id='output-data-upload'),
+       dbc.Col([
+            html.Div([
+                html.H5(""),
+                dbc.Button("Dashboard Comercial - eGestor", color="primary", id="location-button", size="lg")
+            ], style={}),
+            html.Div([
+                html.P("Selecione o setor que deseja visualizar a curva de crescimento diário:",
+                        style={"margin-top": "10px"}),
+                dcc.Dropdown(id='fig-dropdown2',
+                             options=[{'label': k, 'value': k} for k in figs2.keys()],
+                             value=list(figs2.keys())[0]
+                ),
+                html.Div(id='fig-container2', children=dcc.Graph(figure=figs2[list(figs2.keys())[0]])
+                )
+            ]),
+            html.Div([
+                html.P("Selecione o setor que deseja visualizar:",
+                        style={'width': '50%', "margin-top": "10px"}),
+                dcc.Dropdown(id='fig-dropdown',
+                             options=[{'label': k, 'value': k} for k in figs.keys()],
+                             value=list(figs.keys())[0]
+                ),
+                html.Div(id='fig-container', children=dcc.Graph(figure=figs[list(figs.keys())[0]])
+                )
+            ]),
+        ]),
+    ])
+
+    
+@app.callback(
+    [Output('fig-container', 'children'), Output('fig-container2', 'children')],
+    [Input('fig-dropdown', 'value'), Input('fig-dropdown2', 'value')]
+)
+def update_figures(selected_fig, selected_fig2):
+    figs = graficos_total()
+    figs2 = graficos_total2()
+    
+    return dcc.Graph(figure=figs[selected_fig]), dcc.Graph(figure=figs2[selected_fig2])
+
+@app.callback(Output('output-data-upload', 'chepssoaildren'),
+              Input('upload-data', 'contents'),
+              State('upload-data', 'filename'),
+              State('upload-data', 'last_modified'))
+def update_output(list_of_contents, list_of_names, list_of_dates):
+    if list_of_contents is not None:
+        children = [
+            parse_contents(c, n, d) for c, n, d in
+            zip(list_of_contents, list_of_names, list_of_dates)]
+        return children
+
+@app.callback(Output('output-div', 'children'),
+              Input('submit-button','n_clicks'),
+              State('stored-data','data'),
+              State('xaxis-data','value'),
+              State('yaxis-data', 'value'))
+def make_graphs(n, data, x_data, y_data):
+    if n is None:
+        return dash.no_update
+    else:
+        bar_fig = px.bar(data, x=x_data, y=y_data)
+        # print(data)
+        return dcc.Graph(figure=bar_fig)
+
+app.run_server(port='8080', host='192.168.40.230')
