@@ -1,0 +1,36 @@
+import plotly.express as px
+
+# Definir uma função que cria um gráfico de barras
+def create_bar_chart():
+    df = px.data.gapminder().query("continent == 'Europe'")
+    fig = px.bar(df, x='year', y='pop', color='country')
+    return fig
+
+# Definir uma função que cria um gráfico de linhas
+def create_line_chart():
+    df = px.data.gapminder().query("continent == 'Asia'")
+    fig = px.line(df, x='year', y='gdpPercap', color='country')
+    return fig
+
+# Criar um dicionário que associa os nomes dos gráficos às suas funções correspondentes
+figs = {
+    'Gráfico de Barras': create_bar_chart,
+    'Gráfico de Linhas': create_line_chart
+}
+
+# Criar um objeto Dash que contém um menu suspenso e um gráfico
+app.layout = html.Div([
+    html.P("Selecione o tipo de gráfico que deseja visualizar:"),
+    dcc.Dropdown(id='fig-dropdown', options=[{'label': k, 'value': k} for k in figs.keys()], value=list(figs.keys())[0]),
+    html.Div(id='fig-container')
+])
+
+# Definir um callback que atualiza o gráfico quando o menu suspenso é alterado
+@app.callback(Output('fig-container', 'children'), Input('fig-dropdown', 'value'))
+def update_fig(value):
+    # Chamar a função correspondente ao nome do gráfico selecionado
+    fig = figs[value]()
+    return dcc.Graph(figure=fig)
+
+if __name__ == '__main__':
+    app.run_server(debug=True)
